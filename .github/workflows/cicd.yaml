@@ -13,34 +13,36 @@ jobs:
       id-token: write
 
     steps:
-    - name: Check out the repository
-      uses: actions/checkout@v2
+      - name: Check out the repository
+        uses: actions/checkout@v4
 
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1          
 
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: us-east-1 
-        # role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-        # role-session-name: GitHubActionsSession
-        # aws-region: us-east-1 
-        
-    - name: Print AWS credentials (for debugging)
-      run: aws sts get-caller-identity
-# Login to ECR
-#=============
-    - name: Login to ECR
-      id: login-ecr
-      uses: aws-actions/amazon-ecr-login@v2
+      - name: Print AWS identity
+        run: aws sts get-caller-identity
 
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v5
+        with:
+          mask-password: 'true'
 
-    - name: Docker build 
-      run: |
-        docker build -t netflix_frontend:latest .
+      - name: Build Docker image
+        run: docker build -t netflix_frontend:latest .
 
-    - name: Docker push
-      run: |
-        docker tag netflix_frontend:latest 348230509416.dkr.ecr.us-east-1.amazonaws.com/netflix_frontend:${GITHUB_RUN_NUMBER}
-        docker push 348230509416.dkr.ecr.us-east-1.amazonaws.com/netflix_frontend:${GITHUB_RUN_NUMBER}
+      - name: Tag and Push to ECR
+        run: |
+          ECR_REGISTRY=${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY=netflix_frontend
+          IMAGE_TAG=${{ github.run_number }}
+
+          docker tag netflix_frontend:latest $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker tag netflix_frontend:latest $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
